@@ -1,1 +1,1 @@
-The compiler program, it can compiles declaration, assigment, if-else condition, and loop.
+The compiler program, can compile declarations, assigments, if-else conditions, and loops.
