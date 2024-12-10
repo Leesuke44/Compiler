@@ -1,0 +1,213 @@
+Script started on Wed 29 May 2024 01:11:58 PM CST
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ cat ex12.l
+%{
+#include "y.tab.h"
+#include "ex12hdr.h"
+#include <math.h>
+%}
+
+%%
+
+[ \t]	;		 /* ignore white space */
+
+[Pp][Rr][Oo][Gg][Rr][Aa][Mm]	{ return PROGRAM; }
+
+[Bb][Ee][Gg][Ii][Nn]	{ return START; }
+
+[Ee][Nn][Dd]	{ return END; } 
+
+[Dd][Ee][Cc][Ll][Aa][Rr][Ee] {	return DECLARE; }
+
+[Aa][Ss] { return AS; }
+
+[Ii][Nn][Tt][Ee][Gg][Ee][Rr] {	return INTEGER; }
+
+[Ff][Ll][Oo][Aa][Tt] {	return FLOAT; }
+
+, { return yytext[0]; }
+
+[A-Za-z][A-Za-z0-9]*	{	/* return symbol pointer */
+		struct symtab *sp = symlook(yytext);
+
+		yylval.symp = sp;
+		return NAME;
+	}
+[0-9]+	{yylval.ival = atoi(yytext); return NUMBER;}
+
+\n	|
+;	|
+\[	|
+\]	return yytext[0];
+%%
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ cat ex12.y
+%{
+#include "ex12hdr.h"
+#include <string.h>
+char progName[100] = {'\0'};
+struct symtab varList[20];
+int varCount = 0;
+%}
+
+%union {
+	int ival;
+	double dval;
+	struct symtab *symp;
+	char* charp;
+	int dataType;
+}
+%token <symp> NAME 
+%token <ival> NUMBER
+%token PROGRAM START END DECLARE AS INTEGER INTEGER_ARRAY FLOAT FLOAT_ARRAY 
+%left '-' '+'
+%left '*' '/'
+%nonassoc UMINUS
+
+%type <symp> variable
+%type <dataType> data_type
+%%
+
+program_list:	PROGRAM program_name '\n'
+		program '\n'	{}
+	;
+
+program_name:	NAME {strcpy(progName, $1->name); printf("START %s\n", progName);}
+	;
+
+program: 	START '\n'
+		statement_list '\n' 
+		END	{ printf("HALT %s\n", progName); }
+	;
+
+statement_list:	statement 	{}
+	|	statement_list '\n' statement	{}
+	;		
+
+statement:	DECLARE variable_list AS data_type ';'	{
+								int i=0;
+								for(i;i<varCount;i++){
+									if(varList[i].isArray){
+										if($4 == 0) printf("Declare %s, Integer_array, %d\n", varList[i].name, varList[i].arraySize);
+										else if($4==1) printf("Declare %s, Float_array, %d\n", varList[i].name, varList[i].arraySize);
+									}else{
+										if($4 == 0)printf("Declare %s, Integer\n", varList[i].name);
+										else if($4 == 1) printf("Declare %s, Float\n", varList[i].name);
+									}
+								}
+								varCount = 0;
+							}
+	;
+
+variable_list:	variable			{addVar($1); }
+	|	variable_list ',' variable	{addVar($3); }
+	;
+
+variable:	NAME			{$1->isArray = false; $1->arraySize = 0; $$ = $1; }
+	|	NAME '[' NUMBER ']'	{$1->isArray = true; $1->arraySize = $3; $$ = $1; }
+	;
+
+data_type:	INTEGER	{$$ = 0; }
+	|	FLOAT	{$$ = 1; }
+	;
+
+
+
+%%
+/* look up a symbol table entry, add if not present */
+struct symtab *
+symlook(s)
+char *s;
+{
+	char *p;
+	struct symtab *sp;
+	
+	for(sp = symtab; sp < &symtab[NSYMS]; sp++) {
+		/* is it already here? */
+		if(sp->name && !strcmp(sp->name, s))
+			return sp;
+		
+		/* is it free */
+		if(!sp->name) {
+			sp->name = strdup(s);
+			return sp;
+		}
+		/* otherwise continue to next */
+	}
+	yyerror("Too many symbols");
+	exit(1);	/* cannot continue */
+} /* symlook */
+
+void addVar(struct symtab* var){
+	varList[varCount++] = *var;
+}
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ cat ex12hdr.h 
+/*
+ *	Header for calculator program
+ */
+#include <stdio.h>
+#include <stdbool.h>
+#define NSYMS 20	/* maximum number of symbols */
+
+struct symtab {
+	char *name;
+	double value;
+	bool isArray;
+	int arraySize;
+	
+} symtab[NSYMS];
+
+struct symtab *symlook();
+
+void addVar();
+
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ yacc -d ex12.y
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ lex ex12.l
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ gcc y.tab.c lex.yy.c -ly -lfl
+ex12.y: In function ‘symlook’:
+ex12.y:94:2: warning: incompatible implicit declaration of built-in function ‘exit’
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ 
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ 
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ cat data1
+Program testP
+Begin 
+	declare I as integer;
+	declare A,B,C,D, LLL[100] as float; 
+End
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ ./a.oy[Kut < data1
+START testP
+Declare I, Integer
+Declare A, Float
+Declare B, Float
+Declare C, Float
+Declare D, Float
+Declare LLL, Float_array, 100
+HALT testP
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ 
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ 
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ cat data2
+Program testP
+Begin 
+	declare A as integer;
+	declare B[10] as integer;
+	declare C,D[20],E as integer;
+	declare F as float;
+	declare G[30] as float;
+	declare H[40],I,J,K[50] as float; 
+End
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ ./a.out < data2
+START testP
+Declare A, Integer
+Declare B, Integer_array, 10
+Declare C, Integer
+Declare D, Integer_array, 20
+Declare E, Integer
+Declare F, Float
+Declare G, Float_array, 30
+Declare H, Float_array, 40
+Declare I, Float
+Declare J, Float
+Declare K, Float_array, 50
+HALT testP
+]0;61247025S@telnet: ~/CompilerPrograms/Ex1261247025S@telnet:~/CompilerPrograms/Ex12$ exit
+exit
+
+Script done on Wed 29 May 2024 01:13:33 PM CST

@@ -1,0 +1,446 @@
+Script started on Sun 16 Jun 2024 03:26:27 PM CST
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ yacc -d yacc_microEX_compiler.y 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ lex lex_microEX_compiler.l 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ gcc yacc[K[K[K.tab.c yy[K[Klex.yy.c -ly -lfl
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ cat yacc_microEX_compiler.y 
+%{
+#include "hdr.h"
+char progName[100] = {'\0'};
+struct symtab **varList; 
+int varCount = 0, tmpCount = 0, labelCount=0;
+%}
+
+%union {
+	int ival;
+	float fval;
+	struct symtab *symp;
+	char* charp;
+	int dataType;
+	struct AssignInfo *assignInfo;
+	struct ForloopInfo *forloopInfo;  
+}
+
+%token <symp> NAME 
+%token <ival> INUMBER
+%token <fval> FNUMBER
+%token PROGRAM START END DECLARE AS INTEGER INTEGER_ARRAY FLOAT FLOAT_ARRAY FOR ENDFOR TO DOWNTO 
+%left '-' '+'
+%left '*' '/'
+%nonassoc UMINUS
+
+%type <symp> variable assignment for_start
+%type <dataType> data_type
+%type <assignInfo> expression
+%%
+
+program_list:	PROGRAM program_name '\n'
+		program '\n'	{}
+	;
+
+program_name:	NAME {strcpy(progName, $1->name); printf("START %s\n", progName); varList = malloc(sizeof(struct symtab*)*20);}
+	;
+
+program: 	START '\n'
+		statement_list '\n' 
+		END	{ printf("HALT %s\n", progName); }
+	;
+
+statement_list:	statement 	{}
+	|	statement_list '\n' statement	{}
+	;		
+statement:	declaration ';'	{}
+	|	assignment ';'	{}
+	|	forloop		{}
+	;
+
+declaration:	DECLARE variable_list AS data_type	{
+				int i=0;
+				for(i;i<varCount;i++){
+						varList[i]->dataType = $4;					
+						if(varList[i]->isArray){
+						if($4 == 0) printf("Declare %s, Integer_array, %d\n", varList[i]->name, varList[i]->arraySize);
+						else if($4==1) printf("Declare %s, Float_array, %d\n", varList[i]->name, varList[i]->arraySize);
+					}else{
+						if($4 == 0)printf("Declare %s, Integer\n", varList[i]->name);
+						else if($4 == 1) printf("Declare %s, Float\n", varList[i]->name);
+					}
+				}
+				varCount = 0;
+			}
+	;
+
+assignment:	NAME ':' '=' expression 	{
+						//determine the data type of expression
+                                                char type;
+                                                if($1->dataType == 0) type='I';
+                                                else type = 'F';
+						 
+						//output assembly
+						printf("%c_STORE %s, %s\n", type, $4->name, $1->name);
+						$1->value = $4->value;
+						$$ = $1;	
+					}
+	|	NAME '['INUMBER ']' ':''=' expression 	{	
+						//determine the data type of expression
+                                                char type;
+                                                if($1->dataType == 0) type='I';
+                                                else type = 'F';
+						
+						//output assembly
+						printf("%c_STORE %s, %s[%d]\n", type, $7->name, $1->name, $3);  
+						$1->array[$3] = $7->value;
+						$$ = $1;
+					}
+	|	NAME '[' NAME ']' ':''=' expression 	{
+						//determine the data type of expression
+                                                char type;
+                                                if($1->dataType == 0) type='I';
+                                                else type = 'F';
+						
+						//output assembly
+						printf("%c_STORE %s, %s[%s]\n",type, $7->name, $1->name, $3->name);
+						$1->array[(int)$3->value] = $7->value;
+						$$ = $1;
+					}
+	;
+
+expression:	expression '+' expression 	{
+							$$ = malloc(sizeof(struct AssignInfo));
+							//determine the data type of expression
+                                                        char type;
+                                                        if($1->dataType == 0) type='I';
+                                                        else type = 'F';
+
+                                                        //prepare a tmp register
+                                                        char* tmpName = calloc(5, sizeof(char));
+                                                        sprintf(tmpName, "T&%d", tmpCount);
+
+                                                        //output assembly
+                                                        printf("%c_ADD %s, %s, %s\n", type, $1->name, $3->name, tmpName);
+                                                        $$->value = $1->value+$3->value; $$->dataType = $1->dataType; $$->name = tmpName;
+                                                        tmpCount++;
+						}
+	|	expression '-' expression 	{		
+							$$ = malloc(sizeof(struct AssignInfo));
+							//determine the data type of expression
+                                                        char type;
+                                                        if($1->dataType == 0) type='I';
+                                                        else type = 'F';
+
+                                                        //prepare a tmp register
+                                                        char* tmpName = calloc(5, sizeof(char));
+                                                        sprintf(tmpName, "T&%d", tmpCount);
+
+                                                        //output assembly
+                                                        printf("%c_SUB %s, %s, %s\n", type, $1->name, $3->name, tmpName);
+                                                        $$->value = $1->value-$3->value; $$->dataType = $1->dataType; $$->name = tmpName;
+                                                        tmpCount++;
+						}
+	|	expression '*' expression 	{	
+							$$ = malloc(sizeof(struct AssignInfo));
+							//determine the data type of expression
+                                                        char type;
+                                                        if($1->dataType == 0) type='I';
+                                                        else type = 'F';
+
+                                                        //prepare a tmp register
+                                                        char* tmpName = calloc(5, sizeof(char));
+                                                        sprintf(tmpName, "T&%d", tmpCount);
+
+                                                        //output assembly
+                                                        printf("%c_MUL %s, %s, %s\n", type, $1->name, $3->name, tmpName);
+                                                        $$->value = $1->value*$3->value; $$->dataType = $1->dataType; $$->name = tmpName;
+                                                        tmpCount++;
+						}
+	|	expression '/' expression 	{
+							if($3 == 0) yyerror("divide by zero");
+							else{
+								$$ = malloc(sizeof(struct AssignInfo));
+								//determine the data type of expression
+                                                       		char type;
+                                                        	if($1->dataType == 0) type='I';
+                                                        	else type = 'F';
+
+                                                        	//prepare a tmp register
+                                                        	char* tmpName = calloc(5, sizeof(char));
+                                                        	sprintf(tmpName, "T&%d", tmpCount);
+								
+								//output assembly
+								printf("%c_DIV %s, %s, %s\n", type, $1->name, $3->name, tmpName);
+								$$->value = $1->value*$3->value; $$->dataType = $1->dataType; $$->name = tmpName;
+								tmpCount++;	
+							}
+							
+						}
+	|	'-' expression %prec UMINUS 	{	
+							$$ = malloc(sizeof(struct AssignInfo));
+							//determine the data type of expression
+							char type;
+							if($2->dataType == 0) type='I';
+							else type = 'F';
+
+							//prepare a tmp register	
+							char* tmpName = calloc(5, sizeof(char));
+                                                        sprintf(tmpName, "T&%d", tmpCount);
+									
+							//output assembly
+							printf("%c_UMINUS %s, %s\n",type, $2->name, tmpName);
+							$$->value = -$2->value; $$->dataType=$2->dataType; $$->name = tmpName;		
+							tmpCount++;	
+						}	
+	|	INUMBER	{ 		
+					$$ = malloc(sizeof(struct AssignInfo));
+								
+					$$->value =(float)$1; $$->dataType = 0;
+					int len = snprintf(NULL, 0, "%d", $1);
+					$$->name = calloc(len + 1, sizeof(char));
+					snprintf($$->name, len + 1, "%d", $1);
+					
+			}	
+	|	FNUMBER	{
+					$$ = malloc(sizeof(struct AssignInfo));
+					$$->value = $1; $$->dataType = 1;
+					
+					int len = snprintf(NULL, 0, "%f", $1);
+                                        $$->name = calloc(len + 1, sizeof(char));
+                                        snprintf($$->name, len + 1, "%f", $1);
+				}
+	|	NAME	{$$ = malloc(sizeof(struct AssignInfo)); $$->value = $1->value; $$->dataType=1; $$->name=$1->name;}
+	|	NAME '[' INUMBER ']' 	{
+						$$ = malloc(sizeof(struct AssignInfo));
+
+                                        	$$->value =$1->array[$3]; $$->dataType = $1->dataType;
+                                        	int literalLen = snprintf(NULL, 0, "%d", $3);
+						int varLen = strlen($1->name);
+                                        	$$->name = calloc(varLen+literalLen+3, sizeof(char));
+                                        	snprintf($$->name, varLen+literalLen+3, "%s[%d]\0", $1->name, $3);
+					}
+	|	NAME '[' NAME ']'	{
+						$$ = malloc(sizeof(struct AssignInfo));
+
+                                                $$->value =$1->array[(int)$3->value]; $$->dataType = $1->dataType;
+                                                int biasLen = strlen($3->name);
+                                                int varLen = strlen($1->name);
+                                                $$->name = calloc(varLen+biasLen+3, sizeof(char));
+                                                snprintf($$->name, varLen+biasLen+3, "%s[%s]\0", $1->name, $3->name);
+					
+					}
+	;
+
+forloop:	for_start  TO INUMBER ')' '\n'
+		statement_list '\n'
+		ENDFOR					{
+								printf("INC %s\n", $1->name);
+								printf("I_CMP %s, %d\n", $1->name, $3);
+								printf("JLE lb&%d\n", labelCount++);
+							}
+	|	for_start  DOWNTO INUMBER ')' '\n'
+                statement_list '\n'
+                ENDFOR                                  {
+								printf("DEC %s\n", $1->name);
+                                                                printf("I_CMP %s, %d\n", $1->name, $3);
+                                                                printf("JGE lb&%d\n", labelCount++);					
+							}
+	;
+
+for_start:	FOR '(' assignment 	{	
+								printf("lb&%d:    ", labelCount); 
+								$$ = $3;	
+					}
+
+variable_list:	variable			{add_var($1); }
+	|	variable_list ',' variable	{add_var($3); }
+	;
+
+variable:	NAME			{$1->isArray = false; $1->arraySize = 0; $$ = $1; }
+	|	NAME '['INUMBER ']'	{$1->isArray = true; $1->arraySize = $3; $$ = $1; }
+	;
+
+data_type:	INTEGER	{$$ = 0; }
+	|	FLOAT	{$$ = 1; }
+	;
+
+
+
+%%
+/* look up a symbol table entry, add if not present */
+struct symtab *
+symlook(s)
+char *s;
+{
+	char *p;
+	struct symtab *sp;
+	
+	for(sp = symtab; sp < &symtab[NSYMS]; sp++) {
+		/* is it already here? */
+		if(sp->name && !strcmp(sp->name, s))
+			return sp;
+		
+		/* is it free */
+		if(!sp->name) {
+			sp->name = strdup(s);
+			return sp;
+		}
+		/* otherwise continue to next */
+	}
+	yyerror("Too many symbols");
+	exit(1);	/* cannot continue */
+} /* symlook */
+
+void add_var(struct symtab* var){
+	varList[varCount++] = var;
+}
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ cat[K[K[K
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ cat lex_microEX_compiler.l 
+%{
+#include "y.tab.h"
+#include "hdr.h"
+#include <math.h>
+%}
+
+%%
+
+[ \t]	;		 /* ignore white space */
+
+[Pp][Rr][Oo][Gg][Rr][Aa][Mm]	{ return PROGRAM; }
+
+[Bb][Ee][Gg][Ii][Nn]	{ return START; }
+
+[Ee][Nn][Dd]	{ return END; } 
+
+[Dd][Ee][Cc][Ll][Aa][Rr][Ee] {	return DECLARE; }
+
+[Aa][Ss] { return AS; }
+
+[Ii][Nn][Tt][Ee][Gg][Ee][Rr] {	return INTEGER; }
+
+[Ff][Ll][Oo][Aa][Tt] {	return FLOAT; }
+
+[Ff][Oo][Rr] {return FOR;}
+
+[Ee][Nn][Dd][Ff][Oo][Rr] {return ENDFOR; }
+
+[Tt][Oo] {return TO; }
+
+[Dd][Oo][Ww][Nn][Tt][Oo] {return DOWNTO; }
+
+, { return yytext[0]; }
+
+[A-Za-z][A-Za-z0-9]*	{	/* return symbol pointer */
+		struct symtab *sp = symlook(yytext);
+		
+		yylval.symp = sp;
+		return NAME;
+	}
+[0-9]+		{yylval.ival = atoi(yytext); return INUMBER;}
+
+[0-9]+.[0-9]+	{yylval.fval = atof(yytext); return FNUMBER;}
+
+\n	|
+\;	|
+\:	|
+\=	|
+\+	|
+\-	|
+\*	|
+\/	|
+\(	|
+\)	|
+\[	|
+\]	return yytext[0];
+%%
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ cat data1
+Program testP
+Begin 
+	declare I as integer;
+	declare A,B,C,D, LLL[100] as float; 
+	for(I:=1 TO 100)
+		A:=-LLL[I]+B*D-C;
+	endfor
+End
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ ./a.out < data1
+START testP
+Declare I, Integer
+Declare A, Float
+Declare B, Float
+Declare C, Float
+Declare D, Float
+Declare LLL, Float_array, 100
+I_STORE 1, I
+lb&0:    F_UMINUS LLL[I], T&0
+F_MUL B, D, T&1
+F_ADD T&0, T&1, T&2
+F_SUB T&2, C, T&3
+F_STORE T&3, A
+INC I
+I_CMP I, 100
+JLE lb&0
+HALT testP
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ cat data2
+Program MyFirstProgram
+Begin 
+	declare A[100], B, C, D, I, J as integer;
+	declare E[50], F, G, H as float;
+	for(I:= 1 TO 100)
+		declare T1 as integer;
+		T1:=I/2;
+		A[I]:= A[I]+A[T]-B*C/D;
+	endfor
+	for(J:= 50 DOWNTO 1)
+		declare T2 as integer;
+		T2:=J/2;
+		E[J]:= E[I]/E[J]*F-G+H;
+	endfor 
+End
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ ./a.out < data2
+START MyFirstProgram
+Declare A, Integer_array, 100
+Declare B, Integer
+Declare C, Integer
+Declare D, Integer
+Declare I, Integer
+Declare J, Integer
+Declare E, Float_array, 50
+Declare F, Float
+Declare G, Float
+Declare H, Float
+I_STORE 1, I
+lb&0:    Declare T1, Integer
+F_DIV I, 2, T&0
+I_STORE T&0, T1
+I_ADD A[I], A[T], T&1
+F_MUL B, C, T&2
+F_DIV T&2, D, T&3
+I_SUB T&1, T&3, T&4
+I_STORE T&4, A[I]
+INC I
+I_CMP I, 100
+JLE lb&0
+I_STORE 50, J
+lb&1:    Declare T2, Integer
+F_DIV J, 2, T&5
+I_STORE T&5, T2
+F_DIV E[I], E[J], T&6
+F_MUL T&6, F, T&7
+F_SUB T&7, G, T&8
+F_ADD T&8, H, T&9
+F_STORE T&9, E[J]
+DEC J
+I_CMP J, 1
+JGE lb&1
+HALT MyFirstProgram
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ 
+]0;61247025S@telnet: ~/CompilerPrograms/final61247025S@telnet:~/CompilerPrograms/final$ exit
+exit
+
+Script done on Sun 16 Jun 2024 03:28:35 PM CST

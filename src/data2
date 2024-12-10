@@ -1,0 +1,15 @@
+Program MyFirstProgram
+Begin 
+	declare A[100], B, C, D, I, J as integer;
+	declare E[50], F, G, H as float;
+	for(I:= 1 TO 100)
+		declare T1 as integer;
+		T1:=I/2;
+		A[I]:= A[I]+A[T]-B*C/D;
+	endfor
+	for(J:= 50 DOWNTO 1)
+		declare T2 as integer;
+		T2:=J/2;
+		E[J]:= E[I]/E[J]*F-G+H;
+	endfor 
+End
